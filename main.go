@@ -30,19 +30,28 @@ func handleDownloadCommand() {
 	downloadCmd.Parse(os.Args[2:])
 
 	if *output == "" {
-		fmt.Printf("output not specified")
+		fmt.Println("output not specified")
 		os.Exit(1)
 	}
 
 	if *torrentFile == "" {
-		fmt.Printf("torrent file not specified")
+		fmt.Println("torrent file not specified")
 		os.Exit(1)
 	}
 
 	handleDownload(*output, *torrentFile)
 }
 
-func handleDownload(output string, torrentFile string) {
-	fmt.Printf("downloading %s to %s", torrentFile, output)
+func handleDownload(output string, torrentFile string) TorrentMeta {
+	fmt.Println("downloading %s to %s", torrentFile, output)
 
+	file, err := os.ReadFile(torrentFile)
+	if err != nil {
+		fmt.Println("Invalid torrent file location.")
+		panic(err)
+	}
+
+	decodedBencode := decodeBencode(string(file))
+
+	return fromString(decodedBencode)
 }
