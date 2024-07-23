@@ -1,19 +1,22 @@
 package main
 
 import (
-	"encoding/json"
+	"bytes"
+	"crypto/sha1"
 	"fmt"
+	"io"
+
+	"github.com/jackpal/bencode-go"
 )
 
 type TorrentMeta struct {
 	Announce    string
-	InfoHash    []byte
-	PieceHashes [][]byte
-	PieceLength int `json:"piece length"`
+	InfoHash    [20]byte
+	PieceHashes []byte
+	PieceLength int
 	Length      int
 	Name        string
-	Info        string
-	CreatedBy   string `json:"created by"`
+	CreatedBy   string
 }
 
 type BencodeTorrent struct {
@@ -22,27 +25,48 @@ type BencodeTorrent struct {
 }
 
 type TorrentInfo struct {
-	//Pieces      string
-	PieceLength int `json:"piece length"`
+	Pieces      string
+	PieceLength int `bencode:"piece length"`
 	Length      int
 	Name        string
+	CreatedBy   string `bencode:"created by"`
 }
 
-func fromString(source string) TorrentMeta {
+func fromBencode(r io.Reader) TorrentMeta {
+	decodedTorrent := BencodeTorrent{}
+	err := bencode.Unmarshal(r, &decodedTorrent)
+	if err != nil {
+		fmt.Println("Failed to parse torrent file.")
+		panic(err)
+	}
+
+	info := decodedTorrent.Info
+
 	torrentMeta := TorrentMeta{}
+	torrentMeta.Announce = decodedTorrent.Announce
+	torrentMeta.InfoHash = getInfoHash(info)
+	torrentMeta.PieceHashes = getPieceHashes(info.Pieces)
+	torrentMeta.PieceLength = info.PieceLength
+	torrentMeta.Length = info.Length
+	torrentMeta.Name = info.Name
+	torrentMeta.CreatedBy = info.CreatedBy
 
-	err := json.Unmarshal([]byte(source), &torrentMeta)
-	if err != nil {
-		fmt.Println("Couldn't unmarshal torrent meta.")
-		panic(err)
-	}
-
-	torrentInfo := TorrentInfo{}
-	err = json.Unmarshal([]byte(torrentMeta.Info), &torrentInfo)
-	if err != nil {
-		fmt.Println("Couldn't unmarshal torrent info.")
-		panic(err)
-	}
-
+	fmt.Println(torrentMeta)
 	return torrentMeta
+}
+
+func getPieceHashes(pieces string) []byte {
+	hasher := sha1.New()
+	hasher.Write([]byte(pieces))
+	return hasher.Sum(nil)
+}
+
+func getInfoHash(torrentInfo TorrentInfo) [20]byte {
+	var buf bytes.Buffer
+	err := bencode.Marshal(&buf, torrentInfo)
+	if err != nil {
+		fmt.Println("Failed to get info hash.")
+		panic(err)
+	}
+	return sha1.Sum(buf.Bytes())
 }
