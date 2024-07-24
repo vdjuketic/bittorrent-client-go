@@ -13,6 +13,7 @@ type Tracker struct {
 func fromTorrentMeta(torrentMeta TorrentMeta) Tracker {
 	tracker := Tracker{}
 	tracker.InfoHash = torrentMeta.InfoHash
+	// Hardcoded currently, change when appropriate
 	tracker.PeerId = "00112233445566778899"
 	tracker.Port = 6881
 	tracker.Uploaded = 0

@@ -12,7 +12,7 @@ import (
 type TorrentMeta struct {
 	Announce    string
 	InfoHash    [20]byte
-	PieceHashes []byte
+	PieceHashes [][20]byte
 	PieceLength int
 	Length      int
 	Name        string
@@ -55,10 +55,19 @@ func fromBencode(r io.Reader) TorrentMeta {
 	return torrentMeta
 }
 
-func getPieceHashes(pieces string) []byte {
-	hasher := sha1.New()
-	hasher.Write([]byte(pieces))
-	return hasher.Sum(nil)
+func getPieceHashes(pieces string) [][20]byte {
+	hashLen := 20
+	buf := []byte(pieces)
+	if len(buf)%hashLen != 0 {
+		panic("Failed to split piece hashes")
+	}
+	numHashes := len(buf) / hashLen
+	hashes := make([][20]byte, numHashes)
+
+	for i := 0; i < numHashes; i++ {
+		copy(hashes[i][:], buf[i*hashLen:(i+1)*hashLen])
+	}
+	return hashes
 }
 
 func getInfoHash(torrentInfo TorrentInfo) [20]byte {
