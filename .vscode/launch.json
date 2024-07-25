@@ -11,7 +11,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}",
-            "args": "download -output=S:/Projects/python/bittorrent-client-go/test -torrent=S:/Projects/python/bittorrent-client-go/torrents/kali-linux-2024.2-installer-netinst-amd64.iso.torrent"
+            "args": "download -output=S:/Projects/python/bittorrent-client-go/test -torrent=S:/Projects/python/bittorrent-client-go/torrents/congratulations.gif.torrent"
         }
     ]
 }

@@ -1,17 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"fmt"
-	"io"
-
-	"github.com/jackpal/bencode-go"
 )
 
 type TorrentMeta struct {
 	Announce    string
-	InfoHash    [20]byte
+	InfoHash    string
 	PieceHashes [][20]byte
 	PieceLength int
 	Length      int
@@ -19,63 +15,52 @@ type TorrentMeta struct {
 	CreatedBy   string
 }
 
-type BencodeTorrent struct {
-	Announce string
-	Info     TorrentInfo
-}
-
-type TorrentInfo struct {
-	Pieces      string
-	PieceLength int `bencode:"piece length"`
-	Length      int
-	Name        string
-	CreatedBy   string `bencode:"created by"`
-}
-
-func fromBencode(r io.Reader) TorrentMeta {
-	decodedTorrent := BencodeTorrent{}
-	err := bencode.Unmarshal(r, &decodedTorrent)
+func fromBencode(bencode string) TorrentMeta {
+	decoded, err := decodeBencode(bencode)
 	if err != nil {
 		fmt.Println("Failed to parse torrent file.")
 		panic(err)
 	}
 
-	info := decodedTorrent.Info
+	decodedTorrent := decoded.(map[string]interface{})
+	decodedInfo := decodedTorrent["info"].(map[string]interface{})
 
-	torrentMeta := TorrentMeta{}
-	torrentMeta.Announce = decodedTorrent.Announce
-	torrentMeta.InfoHash = getInfoHash(info)
-	torrentMeta.PieceHashes = getPieceHashes(info.Pieces)
-	torrentMeta.PieceLength = info.PieceLength
-	torrentMeta.Length = info.Length
-	torrentMeta.Name = info.Name
-	torrentMeta.CreatedBy = info.CreatedBy
+	meta := TorrentMeta{}
+	meta.Announce = fmt.Sprint(decodedTorrent["announce"])
+	meta.CreatedBy = fmt.Sprint(decodedTorrent["created by"])
+	meta.InfoHash = getInfoHash(decodedTorrent["info"])
 
-	fmt.Println(torrentMeta)
-	return torrentMeta
+	meta.Length = decodedInfo["length"].(int)
+	meta.Name = fmt.Sprint(decodedInfo["name"])
+
+	fmt.Printf("Tracker URL: %s\n", meta.Announce)
+	fmt.Printf("Length: %d\n", meta.Length)
+	fmt.Printf("Info Hash: %s\n", meta.InfoHash[:])
+
+	return meta
 }
 
-func getPieceHashes(pieces string) [][20]byte {
-	hashLen := 20
-	buf := []byte(pieces)
-	if len(buf)%hashLen != 0 {
-		panic("Failed to split piece hashes")
-	}
-	numHashes := len(buf) / hashLen
-	hashes := make([][20]byte, numHashes)
+// func getPieceHashes(pieces string) [][20]byte {
+// 	hashLen := 20
+// 	buf := []byte(pieces)
+// 	if len(buf)%hashLen != 0 {
+// 		panic("Failed to split piece hashes")
+// 	}
+// 	numHashes := len(buf) / hashLen
+// 	hashes := make([][20]byte, numHashes)
 
-	for i := 0; i < numHashes; i++ {
-		copy(hashes[i][:], buf[i*hashLen:(i+1)*hashLen])
-	}
-	return hashes
-}
+// 	for i := 0; i < numHashes; i++ {
+// 		copy(hashes[i][:], buf[i*hashLen:(i+1)*hashLen])
+// 	}
+// 	return hashes
+// }
 
-func getInfoHash(torrentInfo TorrentInfo) [20]byte {
-	var buf bytes.Buffer
-	err := bencode.Marshal(&buf, torrentInfo)
-	if err != nil {
-		fmt.Println("Failed to get info hash.")
-		panic(err)
+func getInfoHash(infoDict interface{}) string {
+	encoding := encodeBencode(infoDict)
+	hash := sha1.Sum([]byte(encoding))
+	var result string
+	for _, number := range hash {
+		result += fmt.Sprintf("%02x", number)
 	}
-	return sha1.Sum(buf.Bytes())
+	return result
 }

@@ -1,7 +1,7 @@
 package main
 
 type Tracker struct {
-	InfoHash   [20]byte
+	InfoHash   string
 	PeerId     string
 	Port       int
 	Uploaded   int

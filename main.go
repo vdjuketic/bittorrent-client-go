@@ -45,12 +45,12 @@ func handleDownloadCommand() {
 func handleDownload(output string, torrentFile string) {
 	fmt.Printf("downloading %s to %s\n", torrentFile, output)
 
-	file, err := os.Open(torrentFile)
+	file, err := os.ReadFile(torrentFile)
 	if err != nil {
 		fmt.Println("Invalid torrent file location.")
 		panic(err)
 	}
 
-	torrentMeta := fromBencode(file)
+	torrentMeta := fromBencode(string(file))
 	downloadTorrent(torrentMeta)
 }
