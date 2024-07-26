@@ -51,6 +51,5 @@ func handleDownload(output string, torrentFile string) {
 		panic(err)
 	}
 
-	torrentMeta := fromBencode(string(file))
-	downloadTorrent(torrentMeta)
+	downloadTorrent(string(file))
 }
