@@ -1,52 +1,209 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
-	"net/http"
-	"strconv"
-
-	"github.com/jackpal/bencode-go"
+	"math"
+	"sort"
+	"sync"
+	"time"
 )
 
-func downloadTorrent(torrentMeta TorrentMeta) {
-	peerUrls := getPeers(torrentMeta)
-	fmt.Println(peerUrls)
+const defaultBlockSize int = 16 * 1024
+
+const peerHadshakeTimeout time.Duration = time.Duration(5 * time.Second)
+const (
+	piece      = 7
+	request    = 6
+	bitfield   = 5
+	interested = 2
+	unchoke    = 1
+)
+const (
+	WAITING     = "waiting"
+	IN_PROGRESS = "in progress"
+	COMPLETE    = "complete"
+)
+
+type PeerMessage struct {
+	lengthPrefix uint32
+	id           uint8
+	index        uint32
+	begin        uint32
+	length       uint32
 }
 
-func getPeers(torrentMeta TorrentMeta) []string {
-	tracker := fromTorrentMeta(torrentMeta)
+type Piece struct {
+	number int
+	status string
+}
 
-	req, err := http.NewRequest("GET", torrentMeta.Announce, nil)
-	if err != nil {
-		fmt.Println("Failed to get tracker data")
-		panic(err)
+type Peer struct {
+	id      int
+	address string
+	status  string
+}
+
+type Result struct {
+	piece  int
+	result []byte
+}
+
+func downloadTorrent(file string) []byte {
+	torrentMeta := fromBencode(string(file))
+	peers := []Peer{}
+
+	for j, address := range getPeers(torrentMeta) {
+		peer := Peer{j, address, "idle"}
+		peers = append(peers, peer)
 	}
 
-	q := req.URL.Query()
-	q.Add("info_hash", string(tracker.InfoHash[:]))
-	q.Add("peer_id", tracker.PeerId)
-	q.Add("port", strconv.Itoa(tracker.Port))
-	q.Add("uploaded", strconv.Itoa(tracker.Uploaded))
-	q.Add("downloaded", strconv.Itoa(tracker.Downloaded))
-	q.Add("left", strconv.Itoa(tracker.Left))
-	q.Add("compact", strconv.Itoa(tracker.Compact))
-	req.URL.RawQuery = q.Encode()
+	pieces := []Piece{}
 
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		fmt.Printf("client: error making http request: %s\n", err)
-		panic(err)
+	for i := 0; i < len(torrentMeta.Pieces); i++ {
+		piece := Piece{i, WAITING}
+		pieces = append(pieces, piece)
 	}
 
-	fmt.Printf("client: got response!\n")
-	fmt.Printf("client: status code: %d\n", res.StatusCode)
+	return downloadTorrentPieces(torrentMeta, pieces, peers)
+}
 
-	decodedBody, err := bencode.Decode(res.Body)
-	if err != nil {
-		fmt.Printf("client: could not read response body: %s\n", err)
-		panic(err)
+func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer) []byte {
+	numJobs := len(pieces)
+	jobs := make(chan Piece, numJobs)
+	results := make(chan Result, numJobs)
+	errors := make(chan Piece, numJobs)
+
+	var wg sync.WaitGroup
+
+	for _, piece := range pieces {
+		jobs <- piece
 	}
-	fmt.Println("client: response body: ", decodedBody)
 
-	return []string{}
+	for i := range peers {
+		wg.Add(1)
+		go func(worker Peer) {
+			defer wg.Done()
+			downloadTorrentPieceWorker(torrentMeta, worker, jobs, errors, results)
+		}(peers[i])
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		addBackFailedJobs(jobs, errors)
+	}()
+
+	for {
+		if len(results) == numJobs {
+			fmt.Println("Stopping workers")
+			close(jobs)
+			close(errors)
+			close(results)
+			break
+		}
+		fmt.Println("Not stopping workers")
+		time.Sleep(time.Second * 3)
+	}
+
+	wg.Wait()
+
+	var totalResults []Result
+	for r := range results {
+		totalResults = append(totalResults, r)
+	}
+
+	sort.Slice(totalResults, func(i, j int) bool {
+		return totalResults[i].piece < totalResults[j].piece
+	})
+
+	var res []byte
+	for _, r := range totalResults {
+		res = append(res, r.result...)
+	}
+
+	return res
+}
+
+func addBackFailedJobs(jobs chan<- Piece, errors <-chan Piece) {
+	for piece := range errors {
+		fmt.Printf("Adding back %d\n", piece.number)
+		jobs <- piece
+	}
+	fmt.Println("Stopping addBackFailedJobs")
+}
+
+func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan Piece, errors chan<- Piece, results chan<- Result) {
+	for piece := range jobs {
+		fmt.Printf("Peer %d started job %d\n", peer.id, piece.number)
+		piece.status = IN_PROGRESS
+		result, err := downloadTorrentPiece(torrentMeta, peer.address, piece.number)
+		if err != nil {
+			piece.status = WAITING
+			errors <- piece
+			fmt.Printf("Peer %d failed job %d\n", peer.id, piece.number)
+		} else {
+			piece.status = COMPLETE
+
+			res := Result{piece: piece.number, result: result}
+			results <- res
+
+			fmt.Printf("Peer %d finished job %d\n", peer.id, piece.number)
+		}
+	}
+	fmt.Printf("Stopping worker %d\n", peer.id)
+}
+
+func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]byte, error) {
+	conn, err := peerHandshake(peer, torrentMeta.InfoHashBytes)
+	if err != nil {
+		return nil, fmt.Errorf("[%s] Handshake failed", peer)
+	}
+
+	err = exchangePeerMessages(conn, peer)
+	if err != nil {
+		return nil, err
+	}
+
+	pieceOffset := 0
+	var downloadedPiece []byte
+
+	pieceLength := getPieceLength(piece, torrentMeta)
+
+	for pieceOffset < pieceLength {
+		nextLength := pieceLength - pieceOffset
+		blockSize := math.Min(float64(defaultBlockSize), float64(nextLength))
+
+		payload := PeerMessage{
+			lengthPrefix: 13,
+			id:           request,
+			index:        uint32(piece),
+			begin:        uint32(pieceOffset),
+			length:       uint32(blockSize),
+		}
+		var buf bytes.Buffer
+		binary.Write(&buf, binary.BigEndian, payload)
+
+		sendMessageToPeer(conn, buf.Bytes())
+
+		data, err := receiveDataMessageFromPeer(conn)
+		if err != nil {
+			return nil, fmt.Errorf("[%s] Error receiving data message", peer)
+		}
+
+		downloadedPiece = append(downloadedPiece, data...)
+
+		pieceOffset += int(blockSize)
+	}
+	fmt.Printf("Finished downloading piece %d\n", piece)
+
+	downloadedPieceHash := convertToPieceHash(downloadedPiece)
+
+	if downloadedPieceHash != torrentMeta.Pieces[piece] {
+		return nil, fmt.Errorf("[%s] Integrity check failed", peer)
+	}
+
+	defer conn.Close()
+	return downloadedPiece, nil
 }

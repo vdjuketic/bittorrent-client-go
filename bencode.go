@@ -2,32 +2,69 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
 )
 
-func encodeBencode(data interface{}) []byte {
-	switch v := data.(type) {
-	case int:
-		return []byte(fmt.Sprintf("i%de", data))
-	case string:
-		return []byte(fmt.Sprintf("%d:%s", len(fmt.Sprint(data)), data))
-	case []byte:
-		return v
-	case []interface{}:
-		return []byte(strings.Trim(strings.Join(strings.Fields(fmt.Sprint(data)), ","), "[]"))
-	case map[string]interface{}:
-		res := "d"
-		for key, val := range data.(map[string]interface{}) {
-			res += string(encodeBencode(key))
-			res += string(encodeBencode(val))
-		}
-		res += "e"
-		return []byte(res)
-	default:
-		panic("unsupported data type")
+func encodePair(key, value interface{}) ([]byte, []byte, error) {
+	encodedKey, err := encodeBencode(key)
+	if err != nil {
+		return nil, nil, err
 	}
+
+	encodedValue, err := encodeBencode(value)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return encodedKey, encodedValue, nil
+}
+
+func encodeBencode(data interface{}) ([]byte, error) {
+	var encoded string
+
+	switch t := data.(type) {
+	case string:
+		encoded = fmt.Sprintf("%d:%s", len(t), t)
+	case int:
+		encoded = fmt.Sprintf("i%de", t)
+	case []interface{}:
+		encodedElements := make([]string, len(t))
+
+		for i, u := range t {
+			encodedElement, err := encodeBencode(u)
+			if err != nil {
+				return nil, err
+			}
+			encodedElements[i] = string(encodedElement)
+		}
+
+		sort.Strings(encodedElements)
+		encodedList := strings.Join(encodedElements, "")
+		encoded = fmt.Sprintf("l%se", encodedList)
+
+	case map[string]interface{}:
+		sortedKeys := make([]string, 0, len(t))
+		for k := range t {
+			sortedKeys = append(sortedKeys, k)
+		}
+		sort.Strings(sort.StringSlice(sortedKeys))
+
+		encodedDictionary := make([]string, 0, len(t)*2)
+		for _, k := range sortedKeys {
+			encK, encV, err := encodePair(k, t[k])
+			if err != nil {
+				return nil, err
+			}
+			encodedDictionary = append(encodedDictionary, string(encK), string(encV))
+		}
+		encoded = fmt.Sprintf("d%se", strings.Join(encodedDictionary, ""))
+	default:
+		return nil, fmt.Errorf("data type not supported %v", t)
+	}
+	return []byte(encoded), nil
 }
 
 func decodeBencode(bencode string) (interface{}, error) {

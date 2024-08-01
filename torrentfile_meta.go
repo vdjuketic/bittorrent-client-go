@@ -2,17 +2,20 @@ package main
 
 import (
 	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
+	"strings"
 )
 
 type TorrentMeta struct {
-	Announce    string
-	InfoHash    string
-	PieceHashes [][20]byte
-	PieceLength int
-	Length      int
-	Name        string
-	CreatedBy   string
+	Announce      string
+	InfoHash      string
+	InfoHashBytes []byte
+	Pieces        []string
+	PieceLength   int
+	Length        int
+	Name          string
+	CreatedBy     string
 }
 
 func fromBencode(bencode string) TorrentMeta {
@@ -27,40 +30,69 @@ func fromBencode(bencode string) TorrentMeta {
 
 	meta := TorrentMeta{}
 	meta.Announce = fmt.Sprint(decodedTorrent["announce"])
-	meta.CreatedBy = fmt.Sprint(decodedTorrent["created by"])
 	meta.InfoHash = getInfoHash(decodedTorrent["info"])
-
+	meta.Pieces = getPieceHashes(decodedInfo["pieces"].(string))
+	meta.PieceLength = decodedInfo["piece length"].(int)
 	meta.Length = decodedInfo["length"].(int)
 	meta.Name = fmt.Sprint(decodedInfo["name"])
+	meta.CreatedBy = fmt.Sprint(decodedTorrent["created by"])
+
+	meta.InfoHashBytes, err = hex.DecodeString(meta.InfoHash)
+	if err != nil {
+		fmt.Println("failed to decode info hash")
+		panic(err)
+	}
 
 	fmt.Printf("Tracker URL: %s\n", meta.Announce)
 	fmt.Printf("Length: %d\n", meta.Length)
 	fmt.Printf("Info Hash: %s\n", meta.InfoHash[:])
+	fmt.Printf("Piece Length: %d\n", meta.PieceLength)
+	fmt.Printf("Pieces:\n%s\n", strings.Join(meta.Pieces[:], "\n"))
 
 	return meta
 }
 
-// func getPieceHashes(pieces string) [][20]byte {
-// 	hashLen := 20
-// 	buf := []byte(pieces)
-// 	if len(buf)%hashLen != 0 {
-// 		panic("Failed to split piece hashes")
-// 	}
-// 	numHashes := len(buf) / hashLen
-// 	hashes := make([][20]byte, numHashes)
-
-// 	for i := 0; i < numHashes; i++ {
-// 		copy(hashes[i][:], buf[i*hashLen:(i+1)*hashLen])
-// 	}
-// 	return hashes
-// }
-
 func getInfoHash(infoDict interface{}) string {
-	encoding := encodeBencode(infoDict)
-	hash := sha1.Sum([]byte(encoding))
+	encoded, err := encodeBencode(infoDict)
+	if err != nil {
+		fmt.Println("failed to encode info hash")
+		panic(err)
+	}
+	return convertToPieceHash(encoded)
+}
+
+func convertToPieceHash(piece []byte) string {
+	hash := sha1.Sum(piece)
 	var result string
 	for _, number := range hash {
 		result += fmt.Sprintf("%02x", number)
 	}
 	return result
+}
+
+func getPieceHashes(pieces string) []string {
+	piecesAsBytes := []byte(pieces)
+	piecesAsHexStr := hex.EncodeToString(piecesAsBytes)
+	return splitString(piecesAsHexStr, 40)
+}
+
+func splitString(s string, chunkSize int) []string {
+	var chunks []string
+	for i := 0; i < len(s); i += chunkSize {
+		end := i + chunkSize
+		if end > len(s) {
+			end = len(s)
+		}
+		chunks = append(chunks, s[i:end])
+	}
+	return chunks
+}
+
+func getPieceLength(pieceNum int, torrentMeta TorrentMeta) int {
+	numOfPieces := len(torrentMeta.Pieces)
+	if numOfPieces-1 != pieceNum {
+		return torrentMeta.PieceLength
+	}
+
+	return torrentMeta.Length % torrentMeta.PieceLength
 }

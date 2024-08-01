@@ -51,6 +51,7 @@ func handleDownload(output string, torrentFile string) {
 		panic(err)
 	}
 
-	torrentMeta := fromBencode(string(file))
-	downloadTorrent(torrentMeta)
+	result := downloadTorrent(string(file))
+	os.WriteFile(output, result, 0644)
+	fmt.Printf("Downloaded %s to %s", torrentFile, output)
 }
