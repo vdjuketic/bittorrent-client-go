@@ -4,13 +4,13 @@ This is a simple BitTorrent client implemented in Go. It allows you to download 
 
 ## Features
 
-[x] Download files from a BitTorrent torrent file
-[x] Tracker communication to find peers
-[x] Handling of peer connections and data exchange
-[] Upload files to peers
-[] Support for multiple torrents
-[] CLI interface for easy usage
-[] Efficient piece selection and download strategy
+- [x] Download files from a BitTorrent torrent file
+- [x] Tracker communication to find peers
+- [x] Handling of peer connections and data exchange
+- [ ] Upload files to peers
+- [ ] Support for multiple torrents
+- [ ] CLI interface for easy usage
+- [ ] Efficient piece selection and download strategy
 
 
 ## Installation
