@@ -33,8 +33,8 @@ func encodeBencode(data interface{}) ([]byte, error) {
 	case []interface{}:
 		encodedElements := make([]string, len(t))
 
-		for i, u := range t {
-			encodedElement, err := encodeBencode(u)
+		for i, val := range t {
+			encodedElement, err := encodeBencode(val)
 			if err != nil {
 				return nil, err
 			}
@@ -47,18 +47,18 @@ func encodeBencode(data interface{}) ([]byte, error) {
 
 	case map[string]interface{}:
 		sortedKeys := make([]string, 0, len(t))
-		for k := range t {
-			sortedKeys = append(sortedKeys, k)
+		for key := range t {
+			sortedKeys = append(sortedKeys, key)
 		}
 		sort.Strings(sort.StringSlice(sortedKeys))
 
 		encodedDictionary := make([]string, 0, len(t)*2)
-		for _, k := range sortedKeys {
-			encK, encV, err := encodePair(k, t[k])
+		for _, key := range sortedKeys {
+			encodedKey, encodedVal, err := encodePair(key, t[key])
 			if err != nil {
 				return nil, err
 			}
-			encodedDictionary = append(encodedDictionary, string(encK), string(encV))
+			encodedDictionary = append(encodedDictionary, string(encodedKey), string(encodedVal))
 		}
 		encoded = fmt.Sprintf("d%se", strings.Join(encodedDictionary, ""))
 	default:
