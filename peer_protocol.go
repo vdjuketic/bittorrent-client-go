@@ -37,6 +37,7 @@ func getPeers(torrentMeta TorrentMeta) []string {
 
 	fmt.Println(decodedBody.(map[string]interface{}))
 	peersField := decodedBody.(map[string]interface{})["peers"]
+
 	//add timeout based on interval field
 	if peersField == nil {
 		getPeers(torrentMeta)
@@ -46,7 +47,11 @@ func getPeers(torrentMeta TorrentMeta) []string {
 
 	peers := make([]string, 0)
 	for k := 0; k < len(peersString); k += 6 {
-		peer := strconv.Itoa(int(peersString[k])) + "." + strconv.Itoa(int(peersString[k+1])) + "." + strconv.Itoa(int(peersString[k+2])) + "." + strconv.Itoa(int(peersString[k+3])) + ":" + strconv.Itoa(int((binary.BigEndian.Uint16)([]byte(peersString[k+4:k+6]))))
+		peer := strconv.Itoa(int(peersString[k])) + "." +
+			strconv.Itoa(int(peersString[k+1])) + "." +
+			strconv.Itoa(int(peersString[k+2])) + "." +
+			strconv.Itoa(int(peersString[k+3])) + ":" +
+			strconv.Itoa(int((binary.BigEndian.Uint16)([]byte(peersString[k+4:k+6]))))
 		peers = append(peers, peer)
 	}
 
@@ -147,6 +152,12 @@ func receiveMessageFromPeer(conn net.Conn) (PeerMessage, error) {
 	}
 
 	peerMessage.lengthPrefix = binary.BigEndian.Uint32(buf)
+
+	// Message was a keep alive so we ignore it and read the next one
+	if peerMessage.lengthPrefix == 0 {
+		receiveMessageFromPeer(conn)
+	}
+
 	payloadBuf := make([]byte, peerMessage.lengthPrefix)
 	_, err = conn.Read(payloadBuf)
 	if err != nil {
@@ -169,6 +180,12 @@ func receiveDataMessageFromPeer(conn net.Conn) ([]byte, error) {
 	}
 
 	lengthPrefix := binary.BigEndian.Uint32(buf)
+
+	// Message was a keep alive so we ignore it and read the next one
+	if lengthPrefix == 0 {
+		receiveMessageFromPeer(conn)
+	}
+
 	payloadBuf := make([]byte, lengthPrefix)
 	_, err = io.ReadFull(conn, payloadBuf)
 	if err != nil {
