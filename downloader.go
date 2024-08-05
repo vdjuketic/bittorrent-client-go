@@ -103,7 +103,6 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 			close(results)
 			break
 		}
-		fmt.Println("Not stopping workers")
 		time.Sleep(time.Second * 3)
 	}
 
@@ -128,7 +127,6 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 
 func addBackFailedJobs(jobs chan<- Piece, errors <-chan Piece) {
 	for piece := range errors {
-		fmt.Printf("Adding back %d\n", piece.number)
 		jobs <- piece
 	}
 	fmt.Println("Stopping addBackFailedJobs")
@@ -136,23 +134,23 @@ func addBackFailedJobs(jobs chan<- Piece, errors <-chan Piece) {
 
 func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan Piece, errors chan<- Piece, results chan<- Result) {
 	for piece := range jobs {
-		fmt.Printf("Peer %d started job %d\n", peer.id, piece.number)
+		fmt.Printf("[Peer %d] started downloading piece: %d\n", peer.id, piece.number)
 		piece.status = IN_PROGRESS
 		result, err := downloadTorrentPiece(torrentMeta, peer.address, piece.number)
 		if err != nil {
 			piece.status = WAITING
 			errors <- piece
-			fmt.Printf("Peer %d failed job %d\n", peer.id, piece.number)
+			fmt.Printf("[Peer %d] failed downloading piece: %d\n", peer.id, piece.number)
 		} else {
 			piece.status = COMPLETE
 
 			res := Result{piece: piece.number, result: result}
 			results <- res
 
-			fmt.Printf("Peer %d finished job %d\n", peer.id, piece.number)
+			fmt.Printf("[Peer %d] downloaded piece: %d\n", peer.id, piece.number)
 		}
 	}
-	fmt.Printf("Stopping worker %d\n", peer.id)
+	fmt.Printf("[Peer %d] stopped\n", peer.id)
 }
 
 func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]byte, error) {
@@ -196,7 +194,6 @@ func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]by
 
 		pieceOffset += int(blockSize)
 	}
-	fmt.Printf("Finished downloading piece %d\n", piece)
 
 	downloadedPieceHash := convertToPieceHash(downloadedPiece)
 

@@ -1,6 +1,6 @@
 # BitTorrent Client in Go
 
-This is a simple BitTorrent client implemented in Go. It allows you to download files using the BitTorrent protocol.
+This is a simple BitTorrent client implemented in Go. It allows you to download files using the [BitTorrent protocol] (https://www.bittorrent.org/beps/bep_0003.html).
 
 ## Features
 

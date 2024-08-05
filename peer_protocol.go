@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -36,6 +35,7 @@ func getPeers(torrentMeta TorrentMeta) []string {
 		panic("failed to decode response from tracker")
 	}
 
+	fmt.Println(decodedBody.(map[string]interface{}))
 	peersField := decodedBody.(map[string]interface{})["peers"]
 	//add timeout based on interval field
 	if peersField == nil {
@@ -83,7 +83,6 @@ func peerHandshake(peerUrl string, infoHash []byte) (net.Conn, error) {
 		fmt.Println("error reading handshake from peer")
 		return nil, err
 	}
-	fmt.Printf("Peer ID: %s\n", hex.EncodeToString(buf[48:]))
 
 	return conn, nil
 }
