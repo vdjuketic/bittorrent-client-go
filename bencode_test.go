@@ -70,3 +70,38 @@ func TestEncodeBencode(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeBencode(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected interface{}
+		hasError bool
+	}{
+		// Test cases for string decoding
+		{"4:spam", "spam", false},
+		// Test cases for integer decoding
+		{"i3e", 3, false},
+		{"i-3e", -3, false},
+		// Test cases for list decoding
+		{"l4:spami42ee", []interface{}{"spam", 42}, false},
+		// Test cases for dictionary decoding
+		{"d3:cow3:moo4:spam4:eggse", map[string]interface{}{"cow": "moo", "spam": "eggs"}, false},
+		// Test case for nested structures
+		{"d4:spaml1:a1:bee", map[string]interface{}{"spam": []interface{}{"a", "b"}}, false},
+		// Test cases for invalid bencode
+		{"", "", true},
+		{"i3", "", true},
+		{"l4:spami42e", "", true},
+		{"d3:cow3:moo4:spam4:egg", "", true},
+	}
+
+	for _, test := range tests {
+		result, err := decodeBencode(test.input)
+		if (err != nil) != test.hasError {
+			t.Errorf("decodeBencode(%q) expected error: %v, got: %v", test.input, test.hasError, err)
+		}
+		if !reflect.DeepEqual(result, test.expected) {
+			t.Errorf("decodeBencode(%q) expected %v, got %v", test.input, test.expected, result)
+		}
+	}
+}

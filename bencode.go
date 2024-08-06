@@ -74,6 +74,10 @@ func decodeBencode(bencode string) (interface{}, error) {
 }
 
 func decodeBencodeWithDelimiter(bencode string) (interface{}, int, error) {
+	if bencode == "" {
+		return "", 0, fmt.Errorf("invalid bencode")
+	}
+
 	if unicode.IsDigit(rune(bencode[0])) {
 		return decodeString(bencode)
 	} else if rune(bencode[0]) == 'i' {
@@ -90,6 +94,10 @@ func decodeBencodeWithDelimiter(bencode string) (interface{}, int, error) {
 func decodeString(bencode string) (interface{}, int, error) {
 	firstColonIndex := strings.Index(bencode, ":")
 
+	if firstColonIndex == -1 {
+		return "", 0, fmt.Errorf("invalid string encoding")
+	}
+
 	lengthStr := bencode[:firstColonIndex]
 
 	length, err := strconv.Atoi(lengthStr)
@@ -98,6 +106,10 @@ func decodeString(bencode string) (interface{}, int, error) {
 	}
 
 	endDelimeter := firstColonIndex + 1 + length
+	if endDelimeter > len(bencode) {
+		return "", 0, fmt.Errorf("invalid string encoding")
+	}
+
 	result := bencode[firstColonIndex+1 : endDelimeter]
 
 	return result, endDelimeter, nil
@@ -105,6 +117,10 @@ func decodeString(bencode string) (interface{}, int, error) {
 
 func decodeInt(bencode string) (interface{}, int, error) {
 	eIndex := strings.Index(bencode, "e")
+
+	if eIndex == -1 {
+		return "", 0, fmt.Errorf("invalid int encoding")
+	}
 
 	result, err := strconv.Atoi(bencode[1:eIndex])
 	if err != nil {
@@ -118,7 +134,15 @@ func decodeList(bencode string) (interface{}, int, error) {
 	decodedList := make([]interface{}, 0)
 	currentChar := 1
 
-	for rune(bencode[currentChar]) != 'e' {
+	for {
+		if currentChar >= len(bencode) {
+			return "", 0, fmt.Errorf("invalid list encoding")
+		}
+
+		if rune(bencode[currentChar]) == 'e' {
+			break
+		}
+
 		decodedPart, charsRead, err := decodeBencodeWithDelimiter(bencode[currentChar:])
 		if err != nil {
 			return "", 0, err
@@ -135,13 +159,25 @@ func decodeDictionary(bencode string) (interface{}, int, error) {
 	result := make(map[string]interface{})
 	currentChar := 1
 
-	for rune(bencode[currentChar]) != 'e' {
+	for {
+		if currentChar >= len(bencode) {
+			return "", 0, fmt.Errorf("invalid dictionary encoding")
+		}
+
+		if rune(bencode[currentChar]) == 'e' {
+			break
+		}
+
 		decodedKey, keyCharsRead, err := decodeBencodeWithDelimiter(bencode[currentChar:])
 		if err != nil {
 			return "", 0, err
 		}
 
 		currentChar += keyCharsRead
+
+		if currentChar >= len(bencode) {
+			return "", 0, fmt.Errorf("invalid dictionary encoding")
+		}
 
 		decodedValue, valueCharsRead, err := decodeBencodeWithDelimiter(bencode[currentChar:])
 		if err != nil {
