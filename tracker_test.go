@@ -58,10 +58,52 @@ func TestGetTrackerRequestQueryParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.tracker.InfoHash), func(t *testing.T) {
-			got := getTrackerRequestQueryParams(tt.tracker)
+			got := tt.tracker.getTrackerRequestQueryParams()
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getTrackerRequestQueryParams() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPeersStringToIpList(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []string
+	}{
+		{
+			input: string([]byte{
+				192, 168, 1, 1, 0x1F, 0x90, // 192.168.1.1:8080
+				127, 0, 0, 1, 0x00, 0x50, // 127.0.0.1:80
+			}),
+			expected: []string{
+				"192.168.1.1:8080",
+				"127.0.0.1:80",
+			},
+		},
+		{
+			input: string([]byte{
+				10, 0, 0, 1, 0x1F, 0x90, // 10.0.0.1:8080
+			}),
+			expected: []string{
+				"10.0.0.1:8080",
+			},
+		},
+		{
+			input:    string([]byte{}),
+			expected: []string{},
+		},
+	}
+
+	for _, test := range tests {
+		result := peersStringToIpList(test.input)
+		if len(result) != len(test.expected) {
+			t.Errorf("Expected length %d but got %d", len(test.expected), len(result))
+		}
+		for i := range result {
+			if result[i] != test.expected[i] {
+				t.Errorf("Expected %s but got %s", test.expected[i], result[i])
+			}
+		}
 	}
 }

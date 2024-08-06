@@ -5,61 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
-	"strconv"
 	"time"
 )
 
 func getPeers(torrentMeta TorrentMeta) []string {
 	tracker := fromTorrentMeta(torrentMeta)
-
-	params := getTrackerRequestQueryParams(tracker)
-	url := fmt.Sprintf("%s?%s", torrentMeta.Announce, params)
-
-	response, err := http.Get(url)
-	if err != nil {
-		fmt.Println(err)
-		panic("failed to get response from tracker")
-	}
-
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println(err)
-		panic("failed to read response from tracker")
-	}
-
-	decodedBody, err := decodeBencode(string(body))
-	if err != nil {
-		fmt.Println(err)
-		panic("failed to decode response from tracker")
-	}
-
-	fmt.Println(decodedBody.(map[string]interface{}))
-	peersField := decodedBody.(map[string]interface{})["peers"]
-
-	//add timeout based on interval field
-	if peersField == nil {
-		getPeers(torrentMeta)
-	}
-
-	peersString := peersField.(string)
-
-	peers := make([]string, 0)
-	for k := 0; k < len(peersString); k += 6 {
-		peer := strconv.Itoa(int(peersString[k])) + "." +
-			strconv.Itoa(int(peersString[k+1])) + "." +
-			strconv.Itoa(int(peersString[k+2])) + "." +
-			strconv.Itoa(int(peersString[k+3])) + ":" +
-			strconv.Itoa(int((binary.BigEndian.Uint16)([]byte(peersString[k+4:k+6]))))
-		peers = append(peers, peer)
-	}
-
-	for _, peer := range peers {
-		fmt.Println(peer)
-	}
-
-	return peers
+	return tracker.getPeers(torrentMeta.Announce)
 }
 
 func peerHandshake(peerUrl string, infoHash []byte) (net.Conn, error) {
@@ -130,8 +81,6 @@ func createHandshakeMessage(infoHash []byte) []byte {
 }
 
 func sendMessageToPeer(conn net.Conn, message []byte) error {
-	//fmt.Println("Sending message to peer: ")
-	//fmt.Println(message)
 	_, err := conn.Write(message)
 	if err != nil {
 		fmt.Println(err)
@@ -166,8 +115,6 @@ func receiveMessageFromPeer(conn net.Conn) (PeerMessage, error) {
 	}
 	peerMessage.id = payloadBuf[0]
 
-	//fmt.Println("Received message from peer: ")
-	//fmt.Println(peerMessage)
 	return peerMessage, nil
 }
 
@@ -197,6 +144,5 @@ func receiveDataMessageFromPeer(conn net.Conn) ([]byte, error) {
 		return nil, fmt.Errorf("expected piece message")
 	}
 
-	//fmt.Println("Received data message from peer")
 	return payloadBuf[9:], nil
 }
