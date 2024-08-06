@@ -41,13 +41,8 @@ func fromBencode(bencode string) TorrentMeta {
 	meta.PieceLength = decodedInfo["piece length"].(int)
 	meta.Name = fmt.Sprint(decodedInfo["name"])
 	meta.CreatedBy = fmt.Sprint(decodedTorrent["created by"])
-
-	_, ok := decodedInfo["length"]
-	if ok {
-		meta.Length = decodedInfo["length"].(int)
-	} else {
-		meta.Keys = decodedInfo["keys"].([]File)
-	}
+	meta.Keys = getKeys(decodedInfo)
+	meta.Length = getLength(decodedInfo)
 
 	meta.InfoHashBytes, err = hex.DecodeString(meta.InfoHash)
 	if err != nil {
@@ -56,6 +51,32 @@ func fromBencode(bencode string) TorrentMeta {
 	}
 
 	return meta
+}
+
+func getKeys(decodedInfo map[string]interface{}) []File {
+	// if length is provided it's a single file torrent
+	// if not then it's a multi file torrent with file structure provided in keys
+	_, ok := decodedInfo["length"]
+	if !ok {
+		return decodedInfo["keys"].([]File)
+	}
+	return nil
+}
+
+func getLength(decodedInfo map[string]interface{}) int {
+	_, ok := decodedInfo["length"]
+	if ok {
+		// if length is provided it's a single file torrent with that length
+		return decodedInfo["length"].(int)
+	} else {
+		// if length is not provided it's a multi file torrent
+		// it's length is the sum of length of all individual files
+		sumLength := 0
+		for _, file := range decodedInfo["keys"].([]File) {
+			sumLength += file.length
+		}
+		return sumLength
+	}
 }
 
 func getInfoHash(infoDict interface{}) string {
@@ -104,7 +125,7 @@ func getPieceLength(pieceNum int, torrentMeta TorrentMeta) int {
 }
 
 func (t TorrentMeta) printTree() {
-	if t.Length != 0 {
+	if len(t.Keys) == 0 {
 		// single file torrent
 		fmt.Println(t.Name)
 	} else {

@@ -1,8 +1,11 @@
 package main
 
 import (
+	"io"
+	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -43,5 +46,54 @@ func TestGetPieceLength(t *testing.T) {
 				}
 			},
 		)
+	}
+}
+
+// Helper function to capture output
+func captureOutput(f func()) string {
+	orig := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	f()
+	os.Stdout = orig
+	w.Close()
+	out, _ := io.ReadAll(r)
+	return string(out)
+}
+
+func TestPrintTree_SingleFile(t *testing.T) {
+	torrent := TorrentMeta{
+		Name: "singlefile.txt",
+		Keys: []File{},
+	}
+
+	output := captureOutput(torrent.printTree)
+
+	expected := "singlefile.txt\n"
+	if output != expected {
+		t.Errorf("Expected %q but got %q", expected, output)
+	}
+}
+
+func TestPrintTree_MultiFile(t *testing.T) {
+	torrent := TorrentMeta{
+		Name: "multifile",
+		Keys: []File{
+			{path: []string{"dir1", "file1.txt"}},
+			{path: []string{"dir2", "file2.txt"}},
+			{path: []string{"dir3", "file3.txt"}},
+		},
+	}
+
+	output := captureOutput(torrent.printTree)
+
+	expected := strings.Join([]string{
+		"dir1/file1.txt",
+		"dir2/file2.txt",
+		"dir3/file3.txt",
+		"",
+	}, "\n")
+	if output != expected {
+		t.Errorf("Expected %q but got %q", expected, output)
 	}
 }
