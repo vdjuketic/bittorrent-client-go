@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-type Tracker struct {
+type TrackerRequest struct {
 	InfoHash   []byte
 	PeerId     string
 	Port       int
@@ -19,33 +19,35 @@ type Tracker struct {
 	Compact    int
 }
 
+type Tracker struct {
+	Complete       int
+	Incomplete     int
+	Interval       int
+	MinInterval    int
+	Peers          []string
+	TrackerRequest TrackerRequest
+}
+
 func fromTorrentMeta(torrentMeta TorrentMeta) Tracker {
 	tracker := Tracker{}
-	tracker.InfoHash = torrentMeta.InfoHashBytes
-	tracker.PeerId = "00112233445566778899"
-	tracker.Port = 6881
-	tracker.Uploaded = 0
-	tracker.Downloaded = 0
-	tracker.Left = torrentMeta.Length
-	tracker.Compact = 1
+
+	request := TrackerRequest{}
+	request.InfoHash = torrentMeta.InfoHashBytes
+	request.PeerId = "00112233445566778899"
+	request.Port = 6881
+	request.Uploaded = 0
+	request.Downloaded = 0
+	request.Left = torrentMeta.Length
+	request.Compact = 1
+
+	tracker.TrackerRequest = request
+	tracker.getTrackerData(torrentMeta.Announce)
 
 	return tracker
 }
 
-func (t Tracker) getTrackerRequestQueryParams() string {
-	params := url.Values{}
-	params.Add("info_hash", string(t.InfoHash))
-	params.Add("peer_id", t.PeerId)
-	params.Add("port", fmt.Sprint(t.Port))
-	params.Add("uploaded", fmt.Sprint(t.Uploaded))
-	params.Add("downloaded", fmt.Sprint(t.Downloaded))
-	params.Add("left", fmt.Sprint(t.Left))
-	params.Add("compact", fmt.Sprint(t.Compact))
-
-	return params.Encode()
-}
-
-func (t Tracker) getPeers(trackerUrl string) []string {
+// TODO periodically repeat this call according to interval field to refresh peer data
+func (t Tracker) getTrackerData(trackerUrl string) {
 	params := t.getTrackerRequestQueryParams()
 	url := fmt.Sprintf("%s?%s", trackerUrl, params)
 
@@ -71,14 +73,27 @@ func (t Tracker) getPeers(trackerUrl string) []string {
 	fmt.Println(decodedBody.(map[string]interface{}))
 	peersField := decodedBody.(map[string]interface{})["peers"]
 
-	//add timeout based on interval field
 	if peersField == nil {
-		t.getPeers(trackerUrl)
+		t.getTrackerData(trackerUrl)
 	}
 
 	peersString := peersField.(string)
 
-	return peersStringToIpList(peersString)
+	t.Peers = peersStringToIpList(peersString)
+	t.Interval = decodedBody.(map[string]interface{})["interval"].(int)
+}
+
+func (t Tracker) getTrackerRequestQueryParams() string {
+	params := url.Values{}
+	params.Add("info_hash", string(t.TrackerRequest.InfoHash))
+	params.Add("peer_id", t.TrackerRequest.PeerId)
+	params.Add("port", fmt.Sprint(t.TrackerRequest.Port))
+	params.Add("uploaded", fmt.Sprint(t.TrackerRequest.Uploaded))
+	params.Add("downloaded", fmt.Sprint(t.TrackerRequest.Downloaded))
+	params.Add("left", fmt.Sprint(t.TrackerRequest.Left))
+	params.Add("compact", fmt.Sprint(t.TrackerRequest.Compact))
+
+	return params.Encode()
 }
 
 func peersStringToIpList(peersString string) []string {

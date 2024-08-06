@@ -10,7 +10,7 @@ import (
 
 func getPeers(torrentMeta TorrentMeta) []string {
 	tracker := fromTorrentMeta(torrentMeta)
-	return tracker.getPeers(torrentMeta.Announce)
+	return tracker.Peers
 }
 
 func peerHandshake(peerUrl string, infoHash []byte) (net.Conn, error) {
