@@ -55,12 +55,6 @@ func fromBencode(bencode string) TorrentMeta {
 		panic(err)
 	}
 
-	fmt.Printf("Tracker URL: %s\n", meta.Announce)
-	fmt.Printf("Length: %d\n", meta.Length)
-	fmt.Printf("Info Hash: %s\n", meta.InfoHash[:])
-	fmt.Printf("Piece Length: %d\n", meta.PieceLength)
-	fmt.Printf("Pieces:\n%s\n", strings.Join(meta.Pieces[:], "\n"))
-
 	return meta
 }
 
@@ -116,7 +110,8 @@ func (t TorrentMeta) printTree() {
 	} else {
 		// multi file torrent
 		for _, file := range t.Keys {
-			fmt.Println(file.path)
+			fullPath := strings.Join(file.path[:], "/")
+			fmt.Println(fullPath)
 		}
 	}
 }
