@@ -14,8 +14,14 @@ type TorrentMeta struct {
 	Pieces        []string
 	PieceLength   int
 	Length        int
+	Keys          []File
 	Name          string
 	CreatedBy     string
+}
+
+type File struct {
+	length int
+	path   []string
 }
 
 func fromBencode(bencode string) TorrentMeta {
@@ -33,9 +39,15 @@ func fromBencode(bencode string) TorrentMeta {
 	meta.InfoHash = getInfoHash(decodedTorrent["info"])
 	meta.Pieces = getPieceHashes(decodedInfo["pieces"].(string))
 	meta.PieceLength = decodedInfo["piece length"].(int)
-	meta.Length = decodedInfo["length"].(int)
 	meta.Name = fmt.Sprint(decodedInfo["name"])
 	meta.CreatedBy = fmt.Sprint(decodedTorrent["created by"])
+
+	_, ok := decodedInfo["length"]
+	if ok {
+		meta.Length = decodedInfo["length"].(int)
+	} else {
+		meta.Keys = decodedInfo["keys"].([]File)
+	}
 
 	meta.InfoHashBytes, err = hex.DecodeString(meta.InfoHash)
 	if err != nil {
@@ -95,4 +107,16 @@ func getPieceLength(pieceNum int, torrentMeta TorrentMeta) int {
 	}
 
 	return torrentMeta.Length % torrentMeta.PieceLength
+}
+
+func (t TorrentMeta) printTree() {
+	if t.Length != 0 {
+		// single file torrent
+		fmt.Println(t.Name)
+	} else {
+		// multi file torrent
+		for _, file := range t.Keys {
+			fmt.Println(file.path)
+		}
+	}
 }

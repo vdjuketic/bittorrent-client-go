@@ -52,6 +52,7 @@ type Result struct {
 
 func downloadTorrent(file string) []byte {
 	torrentMeta := fromBencode(string(file))
+	torrentMeta.printTree()
 	peers := []Peer{}
 
 	for j, address := range getPeers(torrentMeta) {
