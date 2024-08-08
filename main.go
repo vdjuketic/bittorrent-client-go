@@ -52,6 +52,11 @@ func handleDownload(output string, torrentFile string) {
 	}
 
 	result := downloadTorrent(string(file))
-	os.WriteFile(output, result, 0644)
+	err = os.WriteFile(output, result, 0644)
+	if err != nil {
+		fmt.Println("Failed to write torrent to file.")
+		panic(err)
+	}
+
 	fmt.Printf("Downloaded %s to %s", torrentFile, output)
 }

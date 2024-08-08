@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -12,27 +13,11 @@ import (
 
 const defaultBlockSize int = 16 * 1024
 
-const peerHadshakeTimeout time.Duration = time.Duration(5 * time.Second)
-const (
-	piece      = 7
-	request    = 6
-	bitfield   = 5
-	interested = 2
-	unchoke    = 1
-)
 const (
 	WAITING     = "waiting"
 	IN_PROGRESS = "in progress"
 	COMPLETE    = "complete"
 )
-
-type PeerMessage struct {
-	lengthPrefix uint32
-	id           uint8
-	index        uint32
-	begin        uint32
-	length       uint32
-}
 
 type Piece struct {
 	number int
@@ -48,6 +33,14 @@ type Peer struct {
 type Result struct {
 	piece  int
 	result []byte
+}
+
+type PeerRequestMessage struct {
+	lengthPrefix uint32
+	id           uint8
+	index        uint32
+	begin        uint32
+	length       uint32
 }
 
 func downloadTorrent(file string) []byte {
@@ -141,7 +134,7 @@ func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan 
 		if err != nil {
 			piece.status = WAITING
 			errors <- piece
-			fmt.Printf("[Peer %d] failed downloading piece: %d\n", peer.id, piece.number)
+			fmt.Printf("[Peer %d] failed downloading piece: %d\n %s", peer.id, piece.number, err)
 		} else {
 			piece.status = COMPLETE
 
@@ -157,10 +150,10 @@ func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan 
 func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]byte, error) {
 	conn, err := peerHandshake(peer, torrentMeta.InfoHashBytes)
 	if err != nil {
-		return nil, fmt.Errorf("[%s] Handshake failed", peer)
+		return nil, err
 	}
 
-	err = exchangePeerMessages(conn, peer)
+	err = exchangePeerMessages(conn, piece)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +167,7 @@ func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]by
 		nextLength := pieceLength - pieceOffset
 		blockSize := math.Min(float64(defaultBlockSize), float64(nextLength))
 
-		payload := PeerMessage{
+		payload := PeerRequestMessage{
 			lengthPrefix: 13,
 			id:           request,
 			index:        uint32(piece),
@@ -186,12 +179,12 @@ func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]by
 
 		sendMessageToPeer(conn, buf.Bytes())
 
-		data, err := receiveDataMessageFromPeer(conn)
+		peerDataMessage, err := receivePieceMessageFromPeer(conn)
 		if err != nil {
-			return nil, fmt.Errorf("[%s] Error receiving data message", peer)
+			return nil, errors.New("error receiving data message")
 		}
 
-		downloadedPiece = append(downloadedPiece, data...)
+		downloadedPiece = append(downloadedPiece, peerDataMessage.data...)
 
 		pieceOffset += int(blockSize)
 	}
@@ -199,7 +192,7 @@ func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]by
 	downloadedPieceHash := convertToPieceHash(downloadedPiece)
 
 	if downloadedPieceHash != torrentMeta.Pieces[piece] {
-		return nil, fmt.Errorf("[%s] Integrity check failed", peer)
+		return nil, errors.New("integrity check failed")
 	}
 
 	defer conn.Close()

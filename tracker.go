@@ -41,14 +41,15 @@ func fromTorrentMeta(torrentMeta TorrentMeta) Tracker {
 	request.Compact = 1
 
 	tracker.TrackerRequest = request
-	tracker.getTrackerData(torrentMeta.Announce)
+	tracker.Peers, tracker.Interval = getTrackerData(tracker, torrentMeta.Announce)
 
 	return tracker
 }
 
 // TODO periodically repeat this call according to interval field to refresh peer data
-func (t Tracker) getTrackerData(trackerUrl string) {
-	params := t.getTrackerRequestQueryParams()
+// Returns interval and list of peers
+func getTrackerData(tracker Tracker, trackerUrl string) ([]string, int) {
+	params := tracker.getTrackerRequestQueryParams()
 	url := fmt.Sprintf("%s?%s", trackerUrl, params)
 
 	response, err := http.Get(url)
@@ -74,13 +75,12 @@ func (t Tracker) getTrackerData(trackerUrl string) {
 	peersField := decodedBody.(map[string]interface{})["peers"]
 
 	if peersField == nil {
-		t.getTrackerData(trackerUrl)
+		getTrackerData(tracker, trackerUrl)
 	}
 
 	peersString := peersField.(string)
 
-	t.Peers = peersStringToIpList(peersString)
-	t.Interval = decodedBody.(map[string]interface{})["interval"].(int)
+	return peersStringToIpList(peersString), decodedBody.(map[string]interface{})["interval"].(int)
 }
 
 func (t Tracker) getTrackerRequestQueryParams() string {
