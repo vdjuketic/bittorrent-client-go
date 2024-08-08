@@ -10,7 +10,7 @@ const DOWNLOAD_COMMAND = "download"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Expected download command")
+		fmt.Println("Expected a command")
 		os.Exit(1)
 	}
 
