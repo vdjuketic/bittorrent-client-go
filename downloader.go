@@ -71,10 +71,12 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 
 	var wg sync.WaitGroup
 
+	// Create jobs for each piece
 	for _, piece := range pieces {
 		jobs <- piece
 	}
 
+	// Create a goroutine for each peer
 	for i := range peers {
 		wg.Add(1)
 		go func(worker Peer) {
@@ -83,12 +85,14 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 		}(peers[i])
 	}
 
+	// Create a worker to add back failed jobs to job queue
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		addBackFailedJobs(jobs, errors)
 	}()
 
+	// Check if all pieces are downloaded and stop all workers
 	for {
 		if len(results) == numJobs {
 			fmt.Println("Stopping workers")
@@ -97,7 +101,7 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 			close(results)
 			break
 		}
-		time.Sleep(time.Second * 3)
+		time.Sleep(time.Second * 1)
 	}
 
 	wg.Wait()
