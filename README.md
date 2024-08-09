@@ -7,10 +7,10 @@ This is a simple BitTorrent client implemented in Go. It allows you to download 
 - [x] Download files from a BitTorrent torrent file
 - [x] Tracker communication to find peers
 - [x] Handling of peer connections and data exchange
-- [ ] Upload files to peers
-- [ ] Support for multiple torrents
+- [ ] Seeding
+- [ ] DHT protocol for peer discovery (trackerless torrents)
+- [ ] Support for multiple torrents at the same time
 - [ ] CLI interface for easy usage
-- [ ] Efficient piece selection and download strategy
 
 
 ## Installation
@@ -39,4 +39,4 @@ The BitTorrent client can be used via the command line. Below are some basic com
 To download a file using a torrent, use the following command:
 
 ```sh
-./bittorrent-client-go.exe download -output="/path/to/output" -torrent="/path/to/torrent/file"
+./bittorrent-client-go download -output="/path/to/output" -torrent="/path/to/torrent/file"
