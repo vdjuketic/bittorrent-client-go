@@ -142,23 +142,23 @@ func addBackFailedJobs(jobs chan<- Piece, errors <-chan Piece) {
 
 func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan Piece, errors chan<- Piece, results chan<- Result) {
 	for piece := range jobs {
-		log.Debug().Msg(fmt.Sprintf("[Peer %d] started downloading piece: %d\n", peer.id, piece.number))
+		log.Debug().Msg(fmt.Sprintf("[Peer %d] started downloading piece: %d", peer.id, piece.number))
 		piece.status = IN_PROGRESS
 		result, err := downloadTorrentPiece(torrentMeta, peer.address, piece.number)
 		if err != nil {
 			piece.status = WAITING
 			errors <- piece
-			log.Debug().Msg(fmt.Sprintf("[Peer %d] failed downloading piece: %d - %s\n", peer.id, piece.number, err))
+			log.Debug().Msg(fmt.Sprintf("[Peer %d] failed downloading piece: %d - %s", peer.id, piece.number, err))
 		} else {
 			piece.status = COMPLETE
 
 			res := Result{piece: piece.number, result: result}
 			results <- res
 
-			log.Debug().Msg(fmt.Sprintf("[Peer %d] downloaded piece: %d\n", peer.id, piece.number))
+			log.Debug().Msg(fmt.Sprintf("[Peer %d] downloaded piece: %d", peer.id, piece.number))
 		}
 	}
-	log.Debug().Msg(fmt.Sprintf("[Peer %d] stopped\n", peer.id))
+	log.Debug().Msg(fmt.Sprintf("[Peer %d] stopped", peer.id))
 }
 
 func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]byte, error) {
