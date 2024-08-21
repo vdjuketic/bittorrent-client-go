@@ -40,3 +40,6 @@ To download a file using a torrent, use the following command:
 
 ```sh
 ./bittorrent-client-go download -output="/path/to/output" -torrent="/path/to/torrent/file"
+```
+
+> **-debug** - for debug mode
