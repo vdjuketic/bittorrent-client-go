@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/rs/zerolog"
 )
 
 const DOWNLOAD_COMMAND = "download"
@@ -27,6 +29,7 @@ func handleDownloadCommand() {
 	downloadCmd := flag.NewFlagSet(DOWNLOAD_COMMAND, flag.ExitOnError)
 	output := downloadCmd.String("output", "", "output location")
 	torrentFile := downloadCmd.String("torrent", "", "torrent file location")
+	debug := downloadCmd.Bool("debug", false, "enable debug logging")
 	downloadCmd.Parse(os.Args[2:])
 
 	if *output == "" {
@@ -37,6 +40,12 @@ func handleDownloadCommand() {
 	if *torrentFile == "" {
 		fmt.Println("torrent file not specified")
 		os.Exit(1)
+	}
+
+	if *debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	} else {
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 	}
 
 	handleDownload(*output, *torrentFile)

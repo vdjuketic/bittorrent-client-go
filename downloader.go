@@ -9,6 +9,9 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
+	"github.com/schollz/progressbar/v3"
 )
 
 const defaultBlockSize int = 16 * 1024
@@ -65,6 +68,8 @@ func downloadTorrent(file string) []byte {
 
 func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer) []byte {
 	numJobs := len(pieces)
+	bar := progressbar.Default(int64(numJobs))
+
 	jobs := make(chan Piece, numJobs)
 	results := make(chan Result, numJobs)
 	errors := make(chan Piece, numJobs)
@@ -74,6 +79,7 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 	// Create jobs for each piece
 	for _, piece := range pieces {
 		jobs <- piece
+		log.Debug().Msg(fmt.Sprintf("added job for piece %d to job queue", piece.number))
 	}
 
 	// Create a goroutine for each peer
@@ -94,14 +100,17 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 
 	// Check if all pieces are downloaded and stop all workers
 	for {
-		if len(results) == numJobs {
-			fmt.Println("Stopping workers")
+		finishedJobs := len(results)
+		bar.Set(finishedJobs)
+
+		if finishedJobs == numJobs {
+			log.Debug().Msg("All jobs finished, stopping workers")
 			close(jobs)
 			close(errors)
 			close(results)
 			break
 		}
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Millisecond * 10)
 	}
 
 	wg.Wait()
@@ -126,29 +135,30 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 func addBackFailedJobs(jobs chan<- Piece, errors <-chan Piece) {
 	for piece := range errors {
 		jobs <- piece
+		log.Debug().Msg(fmt.Sprintf("added piece %d back to job queue", piece.number))
 	}
-	fmt.Println("Stopping addBackFailedJobs")
+	log.Debug().Msg("Stopping addBackFailedJobs")
 }
 
 func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan Piece, errors chan<- Piece, results chan<- Result) {
 	for piece := range jobs {
-		fmt.Printf("[Peer %d] started downloading piece: %d\n", peer.id, piece.number)
+		log.Debug().Msg(fmt.Sprintf("[Peer %d] started downloading piece: %d\n", peer.id, piece.number))
 		piece.status = IN_PROGRESS
 		result, err := downloadTorrentPiece(torrentMeta, peer.address, piece.number)
 		if err != nil {
 			piece.status = WAITING
 			errors <- piece
-			fmt.Printf("[Peer %d] failed downloading piece: %d - %s\n", peer.id, piece.number, err)
+			log.Debug().Msg(fmt.Sprintf("[Peer %d] failed downloading piece: %d - %s\n", peer.id, piece.number, err))
 		} else {
 			piece.status = COMPLETE
 
 			res := Result{piece: piece.number, result: result}
 			results <- res
 
-			fmt.Printf("[Peer %d] downloaded piece: %d\n", peer.id, piece.number)
+			log.Debug().Msg(fmt.Sprintf("[Peer %d] downloaded piece: %d\n", peer.id, piece.number))
 		}
 	}
-	fmt.Printf("[Peer %d] stopped\n", peer.id)
+	log.Debug().Msg(fmt.Sprintf("[Peer %d] stopped\n", peer.id))
 }
 
 func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]byte, error) {
