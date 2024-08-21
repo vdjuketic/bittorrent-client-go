@@ -67,5 +67,5 @@ func handleDownload(output string, torrentFile string) {
 		panic(err)
 	}
 
-	fmt.Printf("Downloaded %s to %s", torrentFile, output)
+	fmt.Printf("\nDownloaded %s to %s", torrentFile, output)
 }

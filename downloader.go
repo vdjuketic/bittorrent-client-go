@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/k0kubun/go-ansi"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/schollz/progressbar/v3"
 )
@@ -68,7 +70,7 @@ func downloadTorrent(file string) []byte {
 
 func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer) []byte {
 	numJobs := len(pieces)
-	bar := progressbar.Default(int64(numJobs))
+	progressBar := getProgressBar(int(numJobs))
 
 	jobs := make(chan Piece, numJobs)
 	results := make(chan Result, numJobs)
@@ -101,7 +103,8 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 	// Check if all pieces are downloaded and stop all workers
 	for {
 		finishedJobs := len(results)
-		bar.Set(finishedJobs)
+
+		progressBar.Set(finishedJobs)
 
 		if finishedJobs == numJobs {
 			log.Debug().Msg("All jobs finished, stopping workers")
@@ -216,4 +219,29 @@ func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]by
 
 	defer conn.Close()
 	return downloadedPiece, nil
+}
+
+func getProgressBar(numJobs int) *progressbar.ProgressBar {
+	var bar *progressbar.ProgressBar
+
+	if zerolog.GlobalLevel() == zerolog.DebugLevel {
+		bar = progressbar.NewOptions(numJobs,
+			progressbar.OptionSetVisibility(false))
+	} else {
+		bar = progressbar.NewOptions(numJobs,
+			progressbar.OptionSetWriter(ansi.NewAnsiStdout()),
+			progressbar.OptionEnableColorCodes(true),
+			progressbar.OptionShowBytes(true),
+			progressbar.OptionSetWidth(15),
+			//TODO change when multiple file torrents are supported
+			progressbar.OptionSetDescription("[cyan][1/1][reset] Downloading file..."),
+			progressbar.OptionSetTheme(progressbar.Theme{
+				Saucer:        "[green]=[reset]",
+				SaucerHead:    "[green]>[reset]",
+				SaucerPadding: " ",
+				BarStart:      "[",
+				BarEnd:        "]",
+			}))
+	}
+	return bar
 }
