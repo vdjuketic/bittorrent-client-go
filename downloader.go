@@ -138,7 +138,7 @@ func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan 
 		if err != nil {
 			piece.status = WAITING
 			errors <- piece
-			fmt.Printf("[Peer %d] failed downloading piece: %d\n %s", peer.id, piece.number, err)
+			fmt.Printf("[Peer %d] failed downloading piece: %d - %s\n", peer.id, piece.number, err)
 		} else {
 			piece.status = COMPLETE
 
@@ -163,11 +163,12 @@ func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]by
 	}
 
 	pieceOffset := 0
-	var downloadedPiece []byte
 
 	pieceLength := getPieceLength(piece, torrentMeta)
+	blocks := int(math.Ceil(float64(pieceLength) / float64(defaultBlockSize)))
 
-	for pieceOffset < pieceLength {
+	// pipeline block request messages
+	for range blocks {
 		nextLength := pieceLength - pieceOffset
 		blockSize := math.Min(float64(defaultBlockSize), float64(nextLength))
 
@@ -183,14 +184,18 @@ func downloadTorrentPiece(torrentMeta TorrentMeta, peer string, piece int) ([]by
 
 		sendMessageToPeer(conn, buf.Bytes())
 
+		pieceOffset += int(blockSize)
+	}
+
+	// receive block messages and assemble the piece
+	var downloadedPiece []byte
+	for range blocks {
 		peerDataMessage, err := receivePieceMessageFromPeer(conn)
 		if err != nil {
 			return nil, errors.New("error receiving data message")
 		}
 
 		downloadedPiece = append(downloadedPiece, peerDataMessage.data...)
-
-		pieceOffset += int(blockSize)
 	}
 
 	downloadedPieceHash := convertToPieceHash(downloadedPiece)
