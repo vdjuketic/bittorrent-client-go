@@ -127,12 +127,12 @@ func getPieceLength(pieceNum int, torrentMeta TorrentMeta) int {
 func (t TorrentMeta) printTree() {
 	if len(t.Keys) == 0 {
 		// single file torrent
-		fmt.Println(t.Name)
+		fmt.Printf("/%s", t.Name)
 	} else {
 		// multi file torrent
 		for _, file := range t.Keys {
 			fullPath := strings.Join(file.path[:], "/")
-			fmt.Println(fullPath)
+			fmt.Printf("/%s", fullPath)
 		}
 	}
 }

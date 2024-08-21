@@ -71,7 +71,6 @@ func getTrackerData(tracker Tracker, trackerUrl string) ([]string, int) {
 		panic("failed to decode response from tracker")
 	}
 
-	fmt.Println(decodedBody.(map[string]interface{}))
 	peersField := decodedBody.(map[string]interface{})["peers"]
 
 	if peersField == nil {
