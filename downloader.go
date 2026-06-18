@@ -20,6 +20,7 @@ const defaultBlockSize int = 16 * 1024
 
 type PieceJob struct {
 	index int
+	retry int
 }
 
 type PieceResult struct {
@@ -54,7 +55,7 @@ func downloadTorrent(file string) []byte {
 	pieces := []PieceJob{}
 
 	for i := 0; i < len(torrentMeta.Pieces); i++ {
-		piece := PieceJob{i}
+		piece := PieceJob{i, 0}
 		pieces = append(pieces, piece)
 	}
 
@@ -129,11 +130,16 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []PieceJob, peers []P
 }
 
 func addBackFailedJobs(jobs chan<- PieceJob, errors <-chan PieceJob) {
-	for piece := range errors {
-		jobs <- piece
-		log.Debug().Msg(fmt.Sprintf("added piece %d back to job queue", piece.index))
+	for failedJob := range errors {
+		jobs <- failedJob.NextRetry()
 	}
 	log.Debug().Msg("Stopping addBackFailedJobs")
+}
+
+func (job PieceJob) NextRetry() PieceJob {
+	job.retry++
+	log.Debug().Msg(fmt.Sprintf("added piece %d back to job queue, retry %d", job.index, job.retry))
+	return job
 }
 
 func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan PieceJob, errors chan<- PieceJob, results chan<- PieceResult) {
