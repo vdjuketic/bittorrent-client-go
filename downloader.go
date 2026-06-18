@@ -18,26 +18,19 @@ import (
 
 const defaultBlockSize int = 16 * 1024
 
-const (
-	WAITING     = "waiting"
-	IN_PROGRESS = "in progress"
-	COMPLETE    = "complete"
-)
+type PieceJob struct {
+	index int
+}
 
-type Piece struct {
-	number int
-	status string
+type PieceResult struct {
+	index int
+	data  []byte
 }
 
 type Peer struct {
 	id      int
 	address string
 	status  string
-}
-
-type Result struct {
-	piece  int
-	result []byte
 }
 
 type PeerRequestMessage struct {
@@ -58,30 +51,30 @@ func downloadTorrent(file string) []byte {
 		peers = append(peers, peer)
 	}
 
-	pieces := []Piece{}
+	pieces := []PieceJob{}
 
 	for i := 0; i < len(torrentMeta.Pieces); i++ {
-		piece := Piece{i, WAITING}
+		piece := PieceJob{i}
 		pieces = append(pieces, piece)
 	}
 
 	return downloadTorrentPieces(torrentMeta, pieces, peers)
 }
 
-func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer) []byte {
+func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []PieceJob, peers []Peer) []byte {
 	numJobs := len(pieces)
 	progressBar := getProgressBar(int(numJobs))
 
-	jobs := make(chan Piece, numJobs)
-	results := make(chan Result, numJobs)
-	errors := make(chan Piece, numJobs)
+	jobs := make(chan PieceJob, numJobs)
+	results := make(chan PieceResult, numJobs)
+	errors := make(chan PieceJob, numJobs)
 
 	var wg sync.WaitGroup
 
 	// Create jobs for each piece
 	for _, piece := range pieces {
 		jobs <- piece
-		log.Debug().Msg(fmt.Sprintf("added job for piece %d to job queue", piece.number))
+		log.Debug().Msg(fmt.Sprintf("added job for piece %d to job queue", piece.index))
 	}
 
 	// Create a goroutine for each peer
@@ -118,47 +111,44 @@ func downloadTorrentPieces(torrentMeta TorrentMeta, pieces []Piece, peers []Peer
 
 	wg.Wait()
 
-	var totalResults []Result
+	var totalResults []PieceResult
 	for r := range results {
 		totalResults = append(totalResults, r)
 	}
 
 	sort.Slice(totalResults, func(i, j int) bool {
-		return totalResults[i].piece < totalResults[j].piece
+		return totalResults[i].index < totalResults[j].index
 	})
 
 	var res []byte
 	for _, r := range totalResults {
-		res = append(res, r.result...)
+		res = append(res, r.data...)
 	}
 
 	return res
 }
 
-func addBackFailedJobs(jobs chan<- Piece, errors <-chan Piece) {
+func addBackFailedJobs(jobs chan<- PieceJob, errors <-chan PieceJob) {
 	for piece := range errors {
 		jobs <- piece
-		log.Debug().Msg(fmt.Sprintf("added piece %d back to job queue", piece.number))
+		log.Debug().Msg(fmt.Sprintf("added piece %d back to job queue", piece.index))
 	}
 	log.Debug().Msg("Stopping addBackFailedJobs")
 }
 
-func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan Piece, errors chan<- Piece, results chan<- Result) {
+func downloadTorrentPieceWorker(torrentMeta TorrentMeta, peer Peer, jobs <-chan PieceJob, errors chan<- PieceJob, results chan<- PieceResult) {
 	for piece := range jobs {
-		log.Debug().Msg(fmt.Sprintf("[Peer %d] started downloading piece: %d", peer.id, piece.number))
-		piece.status = IN_PROGRESS
-		result, err := downloadTorrentPiece(torrentMeta, peer.address, piece.number)
+		log.Debug().Msg(fmt.Sprintf("[Peer %d] started downloading piece: %d", peer.id, piece.index))
+		result, err := downloadTorrentPiece(torrentMeta, peer.address, piece.index)
 		if err != nil {
-			piece.status = WAITING
 			errors <- piece
-			log.Debug().Msg(fmt.Sprintf("[Peer %d] failed downloading piece: %d - %s", peer.id, piece.number, err))
+			log.Debug().Msg(fmt.Sprintf("[Peer %d] failed downloading piece: %d - %s", peer.id, piece.index, err))
 		} else {
-			piece.status = COMPLETE
 
-			res := Result{piece: piece.number, result: result}
+			res := PieceResult{index: piece.index, data: result}
 			results <- res
 
-			log.Debug().Msg(fmt.Sprintf("[Peer %d] downloaded piece: %d", peer.id, piece.number))
+			log.Debug().Msg(fmt.Sprintf("[Peer %d] downloaded piece: %d", peer.id, piece.index))
 		}
 	}
 	log.Debug().Msg(fmt.Sprintf("[Peer %d] stopped", peer.id))
